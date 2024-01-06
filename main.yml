@@ -1,0 +1,39 @@
+name: Reminder
+
+on:
+  workflow_run:
+    workflows: ["Schedule Reminder Workflow"]
+    types:
+      - completed
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set Reminder
+      run: |
+        # Mocking current date and time for testing purposes
+        export CURRENT_DATE=$(date -u +"%Y-%m-%dT16:24:00Z")
+        # Extracting due date from the issue (replace with your logic)
+        DUE_DATE=$(curl -sH "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                      "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.inputs.issueNumber }}" \
+                      | jq -r '.due_on')
+        # Calculate the time difference in seconds
+        NOW=$(date -u +"%s")
+        DUE_DATE_UNIX=$(date -u -d "$DUE_DATE" +"%s")
+        REMINDER_THRESHOLD=$((24 * 60 * 60))  # 24 hours in seconds
+        # Check if the due date is approaching
+        if [ $((DUE_DATE_UNIX - NOW)) -lt $REMINDER_THRESHOLD ]; then
+          # Comment on the issue with a reminder
+          COMMENT="🚨 Reminder: This issue is due soon! Please take action."
+          curl -X POST \
+               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Content-Type: application/json" \
+               -d "{\"body\":\"$COMMENT\"}" \
+               "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.inputs.issueNumber }}/comments"
+        else
+          echo "No reminder needed."
+        fi
